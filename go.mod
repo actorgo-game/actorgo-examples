@@ -1,11 +1,9 @@
 module github.com/actorgo-game/examples
 
-go 1.24.0
-
-toolchain go1.24.7
+go 1.26.1
 
 require (
-	github.com/actorgo-game/actorgo v1.0.2
+	github.com/actorgo-game/actorgo v1.0.6
 	github.com/ahmetb/go-linq/v3 v3.2.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-redis/redis/v8 v8.11.5

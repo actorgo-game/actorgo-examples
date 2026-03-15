@@ -52,6 +52,7 @@ func (*actorRoom) OnLocalReceived(_ *cfacade.Message) (bool, bool) {
 }
 
 func (p *actorRoom) login(session *cproto.Session, req *LoginRequest) {
+	clog.Info("test=%v", req.Nickname)
 	clog.Debug("nickname = %s", req.Nickname)
 
 	if session.IsBind() {
