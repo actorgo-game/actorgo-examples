@@ -21,8 +21,8 @@
       "reconnect_delay": 1,
       "max_reconnects": 0,
       "request_timeout": 2,
-      "user": "",
-      "password": ""
+      "user": "actorgo",
+      "password": "actorgo2026"
     }
   },
   "node": {
