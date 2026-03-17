@@ -38,3 +38,10 @@
 - 从`room/main.go`文件可得知，节点启动时通过`pomelo.NewActor("user")`创建了一个`user actor`. 该`actor`用于管理客户端连接.
 - 通过`app.AddActors(...)`可得知，注册了`room`actor，用于房间管理
 - 如果需要创建多个聊天房间，可以通过room的子actor实现
+
+
+### 用 Linux服务器 开发调试
+- 在actorgo-examples/demo_chat/room 目录下执行go build
+- 修改demo_chat\static\index.html里面的pomelo.init的IP地址为公网的IP
+- 运行./room
+- 在浏览器运行 http://Linux服务器的公网IP:8081/ (开N个窗口相当于N个玩家)

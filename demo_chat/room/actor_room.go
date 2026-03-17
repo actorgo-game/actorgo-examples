@@ -52,13 +52,13 @@ func (*actorRoom) OnLocalReceived(_ *cfacade.Message) (bool, bool) {
 }
 
 func (p *actorRoom) login(session *cproto.Session, req *LoginRequest) {
-	clog.Info("test=%v", req.Nickname)
 	clog.Debug("nickname = %s", req.Nickname)
 
 	if session.IsBind() {
 		return
 	}
 
+	clog.Debug("new session. sid = %v, uid = %v", session.Sid, session.Uid)
 	agent, found := pomelo.GetAgent(session.Sid, session.Uid)
 	if !found {
 		return
@@ -89,6 +89,7 @@ func (p *actorRoom) exit(req *Int64) {
 	if req.Value < 1 {
 		return
 	}
+	clog.Debug("user exit. uid = %v", req.Value)
 	delete(p.userMap, req.Value)
 }
 
@@ -102,6 +103,7 @@ func (p *actorRoom) syncMessage(session *cproto.Session, req *SyncMessage) {
 	user.message++
 	user.balance--
 
+	clog.Debug("Uid:%v", session.Uid)
 	// 有新消息，广播给其他用户
 	p.broadcast("onMessage", req)
 
