@@ -5,8 +5,6 @@ import (
 	ccron "github.com/actorgo-game/actorgo/components/cron"
 	cherryGops "github.com/actorgo-game/actorgo/components/gops"
 	cherrySnowflake "github.com/actorgo-game/actorgo/extend/snowflake"
-	cstring "github.com/actorgo-game/actorgo/extend/string"
-	cherryUtils "github.com/actorgo-game/actorgo/extend/utils"
 	checkCenter "github.com/actorgo-game/examples/demo_cluster/internal/component/check_center"
 	"github.com/actorgo-game/examples/demo_cluster/internal/data"
 	"github.com/actorgo-game/examples/demo_cluster/nodes/game/db"
@@ -14,16 +12,11 @@ import (
 )
 
 func Run(profileFilePath, nodeID string) {
-	if !cherryUtils.IsNumeric(nodeID) {
-		panic("node parameter must is number.")
-	}
-
 	// snowflake global id
-	serverId, _ := cstring.ToInt64(nodeID)
-	cherrySnowflake.SetDefaultNode(serverId)
+	cherrySnowflake.InitDefaultNode(nodeID)
 
 	// 配置cherry引擎
-	app := actorgo.Configure(profileFilePath, nodeID, false, actorgo.Cluster)
+	app := actorgo.Configure(profileFilePath, nodeID, actorgo.Cluster)
 
 	// diagnose
 	app.Register(cherryGops.New())

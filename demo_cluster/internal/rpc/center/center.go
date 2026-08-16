@@ -4,32 +4,11 @@ import (
 	cfacade "github.com/actorgo-game/actorgo/facade"
 	clog "github.com/actorgo-game/actorgo/logger"
 	"github.com/actorgo-game/examples/demo_cluster/internal/code"
+	"github.com/actorgo-game/examples/demo_cluster/internal/constant"
+	"github.com/actorgo-game/examples/demo_cluster/internal/methodid"
 	"github.com/actorgo-game/examples/demo_cluster/internal/pb"
 )
 
-// route = 节点类型.节点handler.remote函数
-
-const (
-	centerType = "center"
-)
-
-const (
-	opsActor     = ".ops"
-	accountActor = ".account"
-)
-
-const (
-	ping               = "ping"
-	registerDevAccount = "registerDevAccount"
-	getDevAccount      = "getDevAccount"
-	getUID             = "getUID"
-)
-
-const (
-	sourcePath = ".system"
-)
-
-// Ping 访问center节点，确认center已启动
 func Ping(app cfacade.IApplication) bool {
 	nodeID := GetCenterNodeID(app)
 	if nodeID == "" {
@@ -37,80 +16,71 @@ func Ping(app cfacade.IApplication) bool {
 	}
 
 	rsp := &pb.Bool{}
-	targetPath := nodeID + opsActor
-	errCode := app.ActorSystem().CallWait(sourcePath, targetPath, ping, nil, rsp)
-	if code.IsFail(errCode) {
-		return false
-	}
-
-	return rsp.Value
+	result := app.ActorSystem().InvokeNode(newContext(), nodeID, methodid.CenterPing, &pb.None{})
+	return decodeResult(app, result, rsp) == code.OK && rsp.Value
 }
 
-// RegisterDevAccount 注册帐号
 func RegisterDevAccount(app cfacade.IApplication, accountName, password, ip string) int32 {
-	req := &pb.DevRegister{
-		AccountName: accountName,
-		Password:    password,
-		Ip:          ip,
-	}
-
-	targetPath := GetTargetPath(app, accountActor)
+	req := &pb.DevRegister{AccountName: accountName, Password: password, Ip: ip}
 	rsp := &pb.Int32{}
-	errCode := app.ActorSystem().CallWait(sourcePath, targetPath, registerDevAccount, req, rsp)
-	if code.IsFail(errCode) {
+	result := app.ActorSystem().InvokeNode(newContext(), GetCenterNodeID(app), methodid.CenterRegisterDevAccount, req)
+	if errCode := decodeResult(app, result, rsp); code.IsFail(errCode) {
 		clog.Warn("[RegisterDevAccount] accountName = %s, errCode = %v", accountName, errCode)
 		return errCode
 	}
-
 	return rsp.Value
 }
 
-// GetDevAccount 获取帐号信息
 func GetDevAccount(app cfacade.IApplication, accountName, password string) int64 {
-	req := &pb.DevRegister{
-		AccountName: accountName,
-		Password:    password,
-	}
-
-	targetPath := GetTargetPath(app, accountActor)
+	req := &pb.DevRegister{AccountName: accountName, Password: password}
 	rsp := &pb.Int64{}
-	errCode := app.ActorSystem().CallWait(sourcePath, targetPath, getDevAccount, req, rsp)
-	if code.IsFail(errCode) {
+	result := app.ActorSystem().InvokeNode(newContext(), GetCenterNodeID(app), methodid.CenterGetDevAccount, req)
+	if errCode := decodeResult(app, result, rsp); code.IsFail(errCode) {
 		clog.Warn("[GetDevAccount] accountName = %s, errCode = %v", accountName, errCode)
 		return 0
 	}
-
 	return rsp.Value
 }
 
-// GetUID 获取帐号UID
-func GetUID(app cfacade.IApplication, sdkId, pid int32, openId string) (cfacade.UID, int32) {
-	req := &pb.User{
-		SdkId:  sdkId,
-		Pid:    pid,
-		OpenId: openId,
-	}
+func GetUID(app cfacade.IApplication, sdkID, pid int32, openID string) (cfacade.UID, int32) {
+	return GetUIDContext(newContext(), app, sdkID, pid, openID)
+}
 
-	targetPath := GetTargetPath(app, accountActor)
+func GetUIDContext(ctx *cfacade.RequestContext, app cfacade.IApplication, sdkID, pid int32, openID string) (cfacade.UID, int32) {
+	req := &pb.User{SdkId: sdkID, Pid: pid, OpenId: openID}
 	rsp := &pb.Int64{}
-	errCode := app.ActorSystem().CallWait(sourcePath, targetPath, getUID, req, rsp)
-	if code.IsFail(errCode) {
+	result := app.ActorSystem().InvokeNode(ctx, GetCenterNodeID(app), methodid.CenterGetUID, req)
+	if errCode := decodeResult(app, result, rsp); code.IsFail(errCode) {
 		clog.Warn("[GetUID] errCode = %v", errCode)
 		return 0, errCode
 	}
-
 	return rsp.Value, code.OK
 }
 
 func GetCenterNodeID(app cfacade.IApplication) string {
-	list := app.Discovery().ListByType(centerType)
+	list := app.Discovery().ListByType(constant.CenterNodeType)
 	if len(list) > 0 {
 		return list[0].GetNodeID()
 	}
 	return ""
 }
 
-func GetTargetPath(app cfacade.IApplication, actorID string) string {
-	nodeID := GetCenterNodeID(app)
-	return nodeID + actorID
+func newContext() *cfacade.RequestContext {
+	ctx := cfacade.NewRequestContext(nil)
+	ctx.Codec = cfacade.CodecProtobuf
+	return ctx
+}
+
+func decodeResult(app cfacade.IApplication, result *cfacade.InvokeResult, response any) int32 {
+	if result == nil {
+		return code.Error
+	}
+	if !result.OK() {
+		return result.Code
+	}
+	if err := result.Decode(app.BodyCodecs(), cfacade.CodecProtobuf, response); err != nil {
+		clog.Warn("decode actor response fail. err = %v", err)
+		return code.Error
+	}
+	return code.OK
 }

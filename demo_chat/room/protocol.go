@@ -2,6 +2,16 @@ package main
 
 import "time"
 
+const (
+	MethodLogin       uint32 = 1001
+	MethodSyncMessage uint32 = 1002
+	MethodExit        uint32 = 1003
+
+	MethodNewUser uint32 = 1101
+	MethodMessage uint32 = 1102
+	MethodBalance uint32 = 1103
+)
+
 // LoginRequest 登录请求
 type LoginRequest struct {
 	Nickname string `json:"nickname"`

@@ -45,9 +45,9 @@ func versionCommand() *cli.Command {
 
 func masterCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "master",
-		Usage:     "run master node",
-		UsageText: "node master --path=../../config/demo-cluster.json --node=gc-master",
+		Name:      "1",
+		Usage:     "run 1 node",
+		UsageText: "node 1 --path=../../config/demo-cluster.json --node=0.0.1.1",
 		Flags:     getFlag(),
 		Action: func(c *cli.Context) error {
 			path, node := getParameters(c)
@@ -59,9 +59,9 @@ func masterCommand() *cli.Command {
 
 func centerCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "center",
-		Usage:     "run center node",
-		UsageText: "node center --path=../../config/demo-cluster.json --node=gc-center",
+		Name:      "2",
+		Usage:     "run 2 node",
+		UsageText: "node 2 --path=../../config/demo-cluster.json --node=0.0.2.1",
 		Flags:     getFlag(),
 		Action: func(c *cli.Context) error {
 			path, node := getParameters(c)
@@ -73,9 +73,9 @@ func centerCommand() *cli.Command {
 
 func webCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "web",
-		Usage:     "run web node",
-		UsageText: "node web --path=../../config/demo-cluster.json --node=gc-web-1",
+		Name:      "3",
+		Usage:     "run 3 node",
+		UsageText: "node 3 --path=../../config/demo-cluster.json --node=0.0.3.1",
 		Flags:     getFlag(),
 		Action: func(c *cli.Context) error {
 			path, node := getParameters(c)
@@ -87,9 +87,9 @@ func webCommand() *cli.Command {
 
 func gateCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "gate",
-		Usage:     "run gate node",
-		UsageText: "node gate --path=../../config/demo-cluster.json --node=gc-gate-1",
+		Name:      "4",
+		Usage:     "run 4 node",
+		UsageText: "node 4 --path=../../config/demo-cluster.json --node=0.0.4.1",
 		Flags:     getFlag(),
 		Action: func(c *cli.Context) error {
 			path, node := getParameters(c)
@@ -101,9 +101,9 @@ func gateCommand() *cli.Command {
 
 func gameCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "game",
-		Usage:     "run game node",
-		UsageText: "node game --path=../../config/demo-cluster.json --node=10001",
+		Name:      "5",
+		Usage:     "run 5 node",
+		UsageText: "node 5 --path=../../config/demo-cluster.json --node=1.1.5.1",
 		Flags:     getFlag(),
 		Action: func(c *cli.Context) error {
 			path, node := getParameters(c)

@@ -7,119 +7,89 @@ import (
 	cfacade "github.com/actorgo-game/actorgo/facade"
 	clog "github.com/actorgo-game/actorgo/logger"
 	cactor "github.com/actorgo-game/actorgo/net/actor"
-	"github.com/actorgo-game/actorgo/net/parser/pomelo"
-	cproto "github.com/actorgo-game/actorgo/net/proto"
+	"github.com/actorgo-game/actorgo/net/parser"
 )
 
-var (
-	_nextUID int64
-)
-
-func newUID() int64 {
-	return atomic.AddInt64(&_nextUID, 1)
-}
+var nextUID atomic.Int64
 
 type (
 	actorRoom struct {
 		cactor.Base
-		userMap map[int64]*User // uid,user
+		server  *parser.Component
+		userMap map[int64]*User
 	}
 
 	User struct {
-		uid      cfacade.UID
+		uid      int64
 		nickname string
 		balance  int64
 		message  int
 	}
 )
 
-func (p *actorRoom) AliasID() string {
-	return "room"
+func newActorRoom(server *parser.Component) *actorRoom {
+	return &actorRoom{server: server}
 }
+
+func (*actorRoom) AliasID() string { return "room" }
 
 func (p *actorRoom) OnInit() {
 	p.userMap = make(map[int64]*User)
-
-	p.Local().Register("login", p.login)
-	p.Local().Register("syncMessage", p.syncMessage)
-
-	p.Remote().Register("exit", p.exit)
+	p.Methods().Register(MethodLogin, p.login)
+	p.Methods().Register(MethodSyncMessage, p.syncMessage)
+	p.Methods().Register(MethodExit, p.exit)
 }
 
-func (*actorRoom) OnLocalReceived(_ *cfacade.Message) (bool, bool) {
-	// 当接收local消息时，直接在当前actor执行(不再路由到子actor)
-	return false, true
-}
-
-func (p *actorRoom) login(session *cproto.Session, req *LoginRequest) {
-	clog.Debug("nickname = %s", req.Nickname)
-
-	if session.IsBind() {
-		return
+func (p *actorRoom) login(ctx *cfacade.RequestContext, req *LoginRequest) (*LoginResponse, error) {
+	if ctx == nil || ctx.Session == nil || ctx.Session.Sid == "" {
+		return nil, fmt.Errorf("chat session is unavailable")
+	}
+	if ctx.Session.Uid > 0 {
+		return &LoginResponse{Code: 0}, nil
 	}
 
-	clog.Debug("new session. sid = %v, uid = %v", session.Sid, session.Uid)
-	agent, found := pomelo.GetAgent(session.Sid, session.Uid)
+	uid := nextUID.Add(1)
+	if err := p.server.Bind(ctx.Session.Sid, uid, map[string]string{"nickname": req.Nickname}); err != nil {
+		return nil, fmt.Errorf("bind chat session: %w", err)
+	}
+	p.userMap[uid] = &User{uid: uid, nickname: req.Nickname, balance: 1000}
+
+	clog.Debug("new chat session. sid=%s uid=%d nickname=%s", ctx.Session.Sid, uid, req.Nickname)
+	p.broadcast(MethodNewUser, &NewUserBroadcast{Content: fmt.Sprintf("user join: %s", req.Nickname)})
+	return &LoginResponse{Code: 0}, nil
+}
+
+func (p *actorRoom) syncMessage(ctx *cfacade.RequestContext, req *SyncMessage) error {
+	if ctx == nil || ctx.Session == nil || ctx.Session.Uid < 1 {
+		return fmt.Errorf("chat session is not logged in")
+	}
+	user, found := p.userMap[ctx.Session.Uid]
 	if !found {
-		return
-	}
-
-	uid := newUID()
-	agent.Bind(uid)
-
-	user := &User{
-		uid:      uid,
-		nickname: req.Nickname,
-		balance:  1000,
-		message:  0,
-	}
-
-	p.userMap[uid] = user
-
-	// 广播其他用户，有新用户进入房间
-	newUserRequest := &NewUserBroadcast{
-		Content: fmt.Sprintf("user join: %+v", req),
-	}
-	p.broadcast("onNewUser", newUserRequest)
-
-	agent.Response(session, &LoginResponse{})
-}
-
-func (p *actorRoom) exit(req *Int64) {
-	if req.Value < 1 {
-		return
-	}
-	clog.Debug("user exit. uid = %v", req.Value)
-	delete(p.userMap, req.Value)
-}
-
-func (p *actorRoom) syncMessage(session *cproto.Session, req *SyncMessage) {
-	user, found := p.userMap[session.Uid]
-	if !found {
-		clog.Error("user not found: %v", session.Uid)
-		return
+		return fmt.Errorf("chat user %d not found", ctx.Session.Uid)
 	}
 
 	user.message++
 	user.balance--
-
-	clog.Debug("Uid:%v", session.Uid)
-	// 有新消息，广播给其他用户
-	p.broadcast("onMessage", req)
-
-	// 扣减当前用户的余额，并通知客户端
-	agent, found := pomelo.GetAgent(session.Sid, session.Uid)
-	if found {
-		agent.Push("onBalance", &UserBalanceResponse{
-			CurrentBalance: user.balance,
-		})
+	p.broadcast(MethodMessage, req)
+	if err := p.server.NotifyUID(user.uid, MethodBalance, &UserBalanceResponse{CurrentBalance: user.balance}); err != nil {
+		clog.Warn("notify balance failed. uid=%d err=%v", user.uid, err)
 	}
+	return nil
 }
 
-func (p *actorRoom) broadcast(route string, v interface{}) {
+func (p *actorRoom) exit(_ *cfacade.RequestContext, req *Int64) error {
+	if req.Value < 1 {
+		return nil
+	}
+	clog.Debug("chat user exit. uid=%d", req.Value)
+	delete(p.userMap, req.Value)
+	return nil
+}
+
+func (p *actorRoom) broadcast(methodID uint32, payload any) {
 	for uid := range p.userMap {
-		if agent, ok := pomelo.GetAgentWithUID(uid); ok {
-			agent.Push(route, v)
+		if err := p.server.NotifyUID(uid, methodID, payload); err != nil {
+			clog.Warn("chat broadcast failed. uid=%d methodID=%d err=%v", uid, methodID, err)
 		}
 	}
 }

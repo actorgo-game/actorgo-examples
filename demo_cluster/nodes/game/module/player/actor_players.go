@@ -5,7 +5,7 @@ import (
 
 	cfacade "github.com/actorgo-game/actorgo/facade"
 	clog "github.com/actorgo-game/actorgo/logger"
-	"github.com/actorgo-game/actorgo/net/parser/pomelo"
+	cactor "github.com/actorgo-game/actorgo/net/actor"
 	"github.com/actorgo-game/examples/demo_cluster/internal/event"
 	"github.com/actorgo-game/examples/demo_cluster/nodes/game/module/online"
 )
@@ -13,7 +13,7 @@ import (
 type (
 	// ActorPlayers 玩家总管理actor
 	ActorPlayers struct {
-		pomelo.ActorBase
+		cactor.Base
 		childExitTime time.Duration
 	}
 )

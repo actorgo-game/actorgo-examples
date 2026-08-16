@@ -1,47 +1,47 @@
-# 单节点精简版聊天室示例
+# 单节点聊天室示例
 
-- 使用cherry引擎构建一个简单的多人聊天室程序
-- 本示例为h5客户端，使用`pomelo-ws-client`做为客户端sdk，连接类型为`websocket`，序列化类型为`json`
+`demo_chat` 使用本地 ActorGo 构建一个单节点多人聊天室：
 
-## 要求
+- 浏览器通过 AGP/1 WebSocket 连接 `34590` 端口。
+- AGP Packet 使用 Protobuf，业务 Body 使用 JSON。
+- HTTP `8081` 端口用于部署 H5 静态页面。
+- 示例是 Standalone 模式，不依赖 NATS。
 
-- GO版本 >= 1.18
+## NodeID 与 MethodID
 
-未使用过`Golang`的开发者，请参考[环境安装与配置](https://github.com/actorgo-game/actorgo/blob/master/_docs/env-setup.md) 进行准备工作。
+聊天室使用 NodeType `1`，默认 NodeID 为 `0.0.1.1`。配置中该类型只有一项，因此省略 `node_id`。
 
-## 操作步骤
+| 功能 | MethodID | 类型 |
+|---|---:|---|
+| 登录 | `1001` | Request |
+| 发送消息 | `1002` | Notify |
+| 连接退出 | `1003` | 服务端内部 Notify |
+| 新用户广播 | `1101` | 服务端 Notify |
+| 聊天消息广播 | `1102` | 服务端 Notify |
+| 余额通知 | `1103` | 服务端 Notify |
 
-### 克隆
+## 启动
 
-- git clone https://github.com/actorgo-game/examples.git
-- 或通过github下载源码的方式。点击`code`按钮`Download zip`文件
+```bash
+cd actorgo-examples/demo_chat/room
+go run .
+```
 
-### 用 GoLand 开发调试 - 推荐
+看到以下日志表示服务已启动：
 
-- 找到`room/main.go`文件，点击`debug`
+```text
+Websocket connector listening at Address :34590
+http run. http://:8081
+```
 
-### 用 Visual Studio Code 开发调试
+在浏览器打开两个 [http://127.0.0.1:8081](http://127.0.0.1:8081) 页面，在任一页面发送消息，两个页面都会收到广播。页面会自动使用当前网页主机连接 WebSocket，无需手工修改公网 IP。
 
-- 在VSCode的左侧栏找到`运行和调试(Debug)`按钮,选择`demo-chat`，点击`绿色小三角`
+配置文件位于 `config/demo-chat.json`。
 
-### 测试
+## 代码结构
 
-- 在`终端(terminal)`面板中看到 `Websocket connector listening at Address :34590` 代表启动成功
-- 在浏览器打开两个页面(`http://127.0.0.1:8081`)，在文本框中输入聊天内容并点击`send`按钮，两个页面将会收到聊天内容的广播
-
-### 配置
-
-- 涉及的环境配置文件在 `/config/demo-chat.json`
-
-### 关于actor model的使用
-
-- 从`room/main.go`文件可得知，节点启动时通过`pomelo.NewActor("user")`创建了一个`user actor`. 该`actor`用于管理客户端连接.
-- 通过`app.AddActors(...)`可得知，注册了`room`actor，用于房间管理
-- 如果需要创建多个聊天房间，可以通过room的子actor实现
-
-
-### 用 Linux服务器 开发调试
-- 在actorgo-examples/demo_chat/room 目录下执行go build
-- 修改demo_chat\static\index.html里面的pomelo.init的IP地址为公网的IP
-- 运行./room
-- 在浏览器运行 http://Linux服务器的公网IP:8081/ (开N个窗口相当于N个玩家)
+- `room/main.go`：注册 AGP server、room Actor 和 HTTP 静态服务。
+- `room/actor_room.go`：连接绑定、用户状态、广播和断线清理。
+- `room/protocol.go`：JSON Body 结构和 MethodID。
+- `static/agp-client.js`：浏览器 AGP/1 JSON 客户端，包含握手、请求、通知和心跳。
+- `static/index.html`：聊天室页面。

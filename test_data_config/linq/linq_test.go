@@ -113,12 +113,12 @@ func TestIndexOf(t *testing.T) {
 	for _, test := range tests {
 		index := linq.From(test.input).IndexOf(test.predicate)
 		if index != test.expected {
-			t.Error("From(%v).IndexOf() expected %v received %v", test.input, test.expected, index)
+			t.Errorf("From(%v).IndexOf() expected %v received %v", test.input, test.expected, index)
 		}
 
 		index = linq.From(test.input).IndexOfT(test.predicate)
 		if index != test.expected {
-			t.Error("From(%v).IndexOfT() expected %v received %v", test.input, test.expected, index)
+			t.Errorf("From(%v).IndexOfT() expected %v received %v", test.input, test.expected, index)
 		}
 	}
 }

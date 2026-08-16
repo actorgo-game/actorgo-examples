@@ -8,6 +8,7 @@ import (
 type (
 	AreaServerRow struct {
 		ServerId   int32  `json:"serverId"`   // 游戏服id
+		NodeID     string `json:"nodeId"`     // ActorGo游戏节点id
 		ServerName string `json:"serverName"` // 游戏服名称
 		AreaId     int32  `json:"areaId"`     // 游戏服所属的区id
 		Status     int32  `json:"status"`     // 游戏服状态

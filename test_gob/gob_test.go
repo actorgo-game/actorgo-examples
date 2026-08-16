@@ -2,15 +2,11 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/gob"
 	"fmt"
-	"log"
-	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
-
-	cfacade "github.com/actorgo-game/actorgo/facade"
-	pomeloMessage "github.com/actorgo-game/actorgo/net/parser/pomelo/message"
 )
 
 type Student struct {
@@ -43,7 +39,7 @@ func TestGOB(t *testing.T) {
 	encoder := gob.NewEncoder(&buffer) //创建编码器
 	err1 := encoder.Encode(&s1)        //编码
 	if err1 != nil {
-		log.Panic(err1)
+		t.Fatal(err1)
 	}
 
 	fmt.Printf("序列化后：%x\n", buffer.Bytes())
@@ -54,39 +50,38 @@ func TestGOB(t *testing.T) {
 	var s2 Student
 	err2 := decoder.Decode(&s2) //解密
 	if err2 != nil {
-		log.Panic(err2)
+		t.Fatal(err2)
 	}
 	fmt.Println("反序列化后：", s2)
+	if s2 != s1 {
+		t.Fatalf("round trip = %#v, want %#v", s2, s1)
+	}
+}
+
+type messageSnapshot struct {
+	MethodID uint32
+	Target   string
+	Payload  Student
 }
 
 func TestMessage(t *testing.T) {
-	gob.Register(context.TODO())
-	gob.Register(pomeloMessage.Message{})
-
-	ctx := context.TODO()
-	msg := pomeloMessage.Message{
-		Type:  1,
-		ID:    2,
-		Route: "333",
-		Data:  nil,
-		Error: false,
+	want := messageSnapshot{
+		MethodID: 1001,
+		Target:   "0.0.5.1.student",
+		Payload:  Student{Name: "李四", Age: 20, Address: "深圳"},
 	}
 
-	m := cfacade.Message{
-		FuncName: "test",
-		Args: []interface{}{
-			ctx,
-			nil,
-			msg,
-		},
+	data, err := encode(&want)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	mBytes, err := encode(&m)
-	fmt.Println(err)
-
-	m1 := cfacade.Message{}
-	err = decode(mBytes, &m1)
-	fmt.Println(err)
+	var got messageSnapshot
+	if err = decode(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("round trip = %#v, want %#v", got, want)
+	}
 }
 
 type FileAll struct {
@@ -95,13 +90,18 @@ type FileAll struct {
 }
 
 func Test111(t *testing.T) {
-	var fa1 FileAll
-	var err error
-	fa1.Name = os.Args[1]
-	fa1.Cxt, err = os.ReadFile(os.Args[1])
+	fileName := filepath.Join(t.TempDir(), "fixture.txt")
+	want := FileAll{Name: fileName, Cxt: []byte("fixture")}
+
+	data, err := encode(&want)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	enc := gob.NewEncoder(os.Stdout)
-	enc.Encode(fa1)
+	var got FileAll
+	if err = decode(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("round trip = %#v, want %#v", got, want)
+	}
 }

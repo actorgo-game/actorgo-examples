@@ -10,30 +10,28 @@
       "@mode": "mode=etcd,通过etcd同步已注册节点"
     },
     "nats": {
-      "master_node_id": "master-1",
+      "master_node_id": "262145",
       "address": "nats://127.0.0.1:4222",
       "reconnect_delay": 1,
       "max_reconnects": 0,
       "request_timeout": 2,
-      "user": "",
-      "password": ""
+      "user": "actorgo",
+      "password": "actorgo2026"
     }
   },
   "node": {
-    "web": [
+    "3": [
       {
-        "node_id": "web-1",
         "address": ":10820",
         "__settings__": {
           "maintain_state": 2,
           "ref_logger": "game_log"
         },
-        "enable": true
+        "enabled": true
       }
     ],
-    "game": [
+    "5": [
       {
-        "node_id": "game-1",
         "address": ":34590",
         "__settings__": {
           "maintain_state": 2,
@@ -42,17 +40,16 @@
           },
           "ref_logger": "game_log"
         },
-        "enable": true
+        "enabled": true
       }
     ],
-    "master": [
+    "1": [
       {
-        "node_id": "master-1",
         "address": ":30000",
         "__settings__": {
           "ref_logger": "game_log"
         },
-        "enable": true
+        "enabled": true
       }
     ]
   },

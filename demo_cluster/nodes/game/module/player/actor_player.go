@@ -1,165 +1,120 @@
 package player
 
 import (
-	cstring "github.com/actorgo-game/actorgo/extend/string"
-	clog "github.com/actorgo-game/actorgo/logger"
-	"github.com/actorgo-game/actorgo/net/parser/pomelo"
+	cfacade "github.com/actorgo-game/actorgo/facade"
+	cactor "github.com/actorgo-game/actorgo/net/actor"
 	cproto "github.com/actorgo-game/actorgo/net/proto"
 	"github.com/actorgo-game/examples/demo_cluster/internal/code"
 	"github.com/actorgo-game/examples/demo_cluster/internal/data"
 	"github.com/actorgo-game/examples/demo_cluster/internal/event"
+	"github.com/actorgo-game/examples/demo_cluster/internal/methodid"
 	"github.com/actorgo-game/examples/demo_cluster/internal/pb"
 	sessionKey "github.com/actorgo-game/examples/demo_cluster/internal/session_key"
 	"github.com/actorgo-game/examples/demo_cluster/nodes/game/db"
 	"github.com/actorgo-game/examples/demo_cluster/nodes/game/module/online"
 )
 
-type (
-	// actorPlayer 每位登录的玩家对应一个子actor
-	actorPlayer struct {
-		pomelo.ActorBase
-		isOnline bool // 玩家是否在线
-		playerId int64
-		uid      int64
-	}
-)
+type actorPlayer struct {
+	cactor.Base
+	isOnline bool
+	playerID int64
+	uid      int64
+}
 
 func (p *actorPlayer) OnInit() {
-	clog.Debug("[actorPlayer] path = %s init!", p.PathString())
-
-	// 注册 session关闭的remote函数(网关触发连接断开后，会调用RPC发送该消息)
-	p.Remote().Register("sessionClose", p.sessionClose)
-
-	p.Local().Register("select", p.playerSelect) // 注册 查看角色
-	p.Local().Register("create", p.playerCreate) // 注册 创建角色
-	p.Local().Register("enter", p.playerEnter)   // 注册 进入角色
+	p.Methods().Register(methodid.GameSessionClose, p.sessionClose)
+	p.Methods().Register(methodid.GamePlayerSelect, p.playerSelect)
+	p.Methods().Register(methodid.GamePlayerCreate, p.playerCreate)
+	p.Methods().Register(methodid.GamePlayerEnter, p.playerEnter)
 }
 
 func (p *actorPlayer) OnStop() {
-	clog.Debug("[actorPlayer] path = %s exit!", p.PathString())
 }
 
-// sessionClose 接收角色session关闭处理
-func (p *actorPlayer) sessionClose() {
-	online.UnBindPlayer(p.uid)
+func (p *actorPlayer) sessionClose(ctx *cfacade.RequestContext, req *pb.Int64) error {
+	uid := req.Value
+	if uid == 0 && ctx != nil && ctx.Session != nil {
+		uid = ctx.Session.Uid
+	}
+	online.UnBindPlayer(uid)
 	p.isOnline = false
 	p.Exit()
-
-	clog.Debug("[actorPlayer] exit! uis = %d", p.uid)
+	return nil
 }
 
-// playerSelect 玩家查询角色列表
-func (p *actorPlayer) playerSelect(session *cproto.Session, _ *pb.None) {
+func (p *actorPlayer) playerSelect(ctx *cfacade.RequestContext, _ *pb.None) (*pb.PlayerSelectResponse, error) {
+	session, err := requestSession(ctx)
+	if err != nil {
+		return nil, err
+	}
 	response := &pb.PlayerSelectResponse{}
-
-	playerId := db.GetPlayerIdWithUID(session.Uid)
-	if playerId > 0 {
-		// 游戏设定单服单角色，协议设计成可返回多角色
-		playerTable, found := db.GetPlayerTable(playerId)
-		if found {
+	if playerID := db.GetPlayerIdWithUID(session.Uid); playerID > 0 {
+		if playerTable, found := db.GetPlayerTable(playerID); found {
 			playerInfo := buildPBPlayer(playerTable)
 			response.List = append(response.List, &playerInfo)
 		}
 	}
-
-	p.Response(session, response)
+	return response, nil
 }
 
-// playerCreate 玩家创角
-func (p *actorPlayer) playerCreate(session *cproto.Session, req *pb.PlayerCreateRequest) {
-	if req.Gender > 1 {
-		p.ResponseCode(session, code.PlayerCreateFail)
-		return
+func (p *actorPlayer) playerCreate(ctx *cfacade.RequestContext, req *pb.PlayerCreateRequest) (*pb.PlayerCreateResponse, error) {
+	session, err := requestSession(ctx)
+	if err != nil {
+		return nil, err
 	}
-
-	// 检查玩家昵称
-	if len(req.PlayerName) < 1 {
-		p.ResponseCode(session, code.PlayerCreateFail)
-		return
+	if req.Gender > 1 || len(req.PlayerName) < 1 {
+		return nil, code.NewInvokeError(code.PlayerCreateFail)
 	}
-
-	// 帐号是否已经在当前游戏服存在角色
 	if db.GetPlayerIdWithUID(session.Uid) > 0 {
-		p.ResponseCode(session, code.PlayerCreateFail)
-		return
+		return nil, code.NewInvokeError(code.PlayerCreateFail)
 	}
-
-	// 获取创角初始化配置
 	playerInitRow, found := data.PlayerInitConfig.Get(req.Gender)
-	if found == false {
-		p.ResponseCode(session, code.PlayerCreateFail)
-		return
+	if !found {
+		return nil, code.NewInvokeError(code.PlayerCreateFail)
 	}
 
-	// 创建角色&添加角色初始的资产
-	serverId := session.GetInt32(sessionKey.ServerID)
-	newPlayerTable, errCode := db.CreatePlayer(session, req.PlayerName, serverId, playerInitRow)
+	serverID := session.GetInt32(sessionKey.ServerID)
+	newPlayerTable, errCode := db.CreatePlayer(session, req.PlayerName, serverID, playerInitRow)
 	if code.IsFail(errCode) {
-		p.ResponseCode(session, errCode)
-		return
+		return nil, code.NewInvokeError(errCode)
 	}
 
-	// TODO 更新最后一次登陆的角色信息到中心节点
-
-	// 抛出角色创建事件
 	playerCreateEvent := event.NewPlayerCreate(newPlayerTable.PlayerId, req.PlayerName, req.Gender)
 	p.PostEvent(&playerCreateEvent)
-
 	playerInfo := buildPBPlayer(newPlayerTable)
-	response := &pb.PlayerCreateResponse{
-		Player: &playerInfo,
-	}
-
-	p.Response(session, response)
+	return &pb.PlayerCreateResponse{Player: &playerInfo}, nil
 }
 
-// playerEnter 玩家进入游戏
-func (p *actorPlayer) playerEnter(session *cproto.Session, req *pb.Int64) {
-	playerId := req.Value
-	if playerId < 1 {
-		p.ResponseCode(session, code.PlayerIDError)
-		return
+func (p *actorPlayer) playerEnter(ctx *cfacade.RequestContext, req *pb.Int64) (*pb.PlayerEnterResponse, error) {
+	session, err := requestSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	playerID := req.Value
+	if playerID < 1 {
+		return nil, code.NewInvokeError(code.PlayerIDError)
+	}
+	playerTable, found := db.GetPlayerTable(playerID)
+	if !found {
+		return nil, code.NewInvokeError(code.PlayerIDError)
 	}
 
-	// 检查并查找该用户下的该角色
-	playerTable, found := db.GetPlayerTable(req.GetValue())
-	if found == false {
-		p.ResponseCode(session, code.PlayerIDError)
-		return
-	}
-
-	// 保存进入游戏的玩家对应的agentPath
-	online.BindPlayer(playerId, playerTable.UID, session.AgentPath)
-
-	// 设置网关节点session的PlayerID属性
-	p.Call(session.ActorPath(), "setSession", &pb.StringKeyValue{
-		Key:   sessionKey.PlayerID,
-		Value: cstring.ToString(playerId),
-	})
-
+	online.BindPlayer(playerID, playerTable.UID, session.Sid)
 	p.uid = playerTable.UID
-	p.playerId = playerTable.PlayerId
-	p.isOnline = true // 设置为在线状态
+	p.playerID = playerTable.PlayerId
+	p.isOnline = true
 
-	// 这里改为客户端主动请求更佳
-	// [01]推送角色 道具数据
-	//module.Item.ListPush(session, playerId)
-	// [02]推送角色 英雄数据
-	//module.Hero.ListPush(session, playerId)
-	// [03]推送角色 成就数据
-	//module.Achieve.CheckNewAndPush(playerId, true, true)
-	// [04]推送角色 邮件数据
-	//module.Mail.ListPush(session, playerId)
-
-	// [99]最后推送 角色进入游戏响应结果
-	response := &pb.PlayerEnterResponse{}
-	response.GuideMaps = map[int32]int32{}
-
-	p.Response(session, response)
-
-	// 角色登录事件
-	loginEvent := event.NewPlayerLogin(p.ActorID(), playerId)
+	response := &pb.PlayerEnterResponse{GuideMaps: map[int32]int32{}}
+	loginEvent := event.NewPlayerLogin(p.ActorID(), playerID)
 	p.PostEvent(&loginEvent)
+	return response, nil
+}
+
+func requestSession(ctx *cfacade.RequestContext) (*cproto.Session, error) {
+	if ctx == nil || ctx.Session == nil || ctx.Session.Uid < 1 {
+		return nil, code.NewInvokeError(code.PlayerDenyLogin)
+	}
+	return ctx.Session, nil
 }
 
 func buildPBPlayer(playerTable *db.PlayerTable) pb.Player {

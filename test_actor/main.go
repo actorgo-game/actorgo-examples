@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/actorgo-game/actorgo"
-	cherryActor "github.com/actorgo-game/actorgo/net/actor"
 )
 
 func main() {
@@ -13,16 +11,10 @@ func main() {
 
 	app := actorgo.Configure(
 		"../config/test.json", // 使用环境的配置
-		"game-1",              // 使用game-1 的节点id
-		false,
+		"0.0.5.1",             // 使用 game 节点的 NodeID
 		actorgo.Standalone,
 	)
 
-	system := cherryActor.NewSystem()
-	system.SetApp(app)
-
-	parentActor := &actor{}
-	system.CreateActor(parentActor.AliasID(), parentActor)
-
-	time.Sleep(1 * time.Hour)
+	app.AddActors(&actor{})
+	app.Startup()
 }

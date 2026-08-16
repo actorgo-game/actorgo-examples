@@ -14,7 +14,7 @@ import (
 
 func Run(profileFilePath, nodeID string) {
 	// 配置cherry引擎,加载profile配置文件
-	app := actorgo.Configure(profileFilePath, nodeID, false, actorgo.Cluster)
+	app := actorgo.Configure(profileFilePath, nodeID, actorgo.Cluster)
 
 	// 注册调度组件
 	app.Register(ccron.New())

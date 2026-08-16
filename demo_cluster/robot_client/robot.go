@@ -9,8 +9,8 @@ import (
 	chttp "github.com/actorgo-game/actorgo/extend/http"
 	ctime "github.com/actorgo-game/actorgo/extend/time"
 	clogger "github.com/actorgo-game/actorgo/logger"
-	cherryClient "github.com/actorgo-game/actorgo/net/parser/pomelo/client"
 	"github.com/actorgo-game/examples/demo_cluster/internal/code"
+	"github.com/actorgo-game/examples/demo_cluster/internal/methodid"
 	"github.com/actorgo-game/examples/demo_cluster/internal/pb"
 	jsoniter "github.com/json-iterator/go"
 )
@@ -18,8 +18,9 @@ import (
 type (
 	// Robot client robot
 	Robot struct {
-		*cherryClient.Client
+		*AGPClient
 		PrintLog   bool
+		TagName    string
 		Token      string
 		ServerId   int32
 		PID        int32
@@ -31,9 +32,9 @@ type (
 	}
 )
 
-func New(client *cherryClient.Client) *Robot {
+func New(client *AGPClient) *Robot {
 	return &Robot{
-		Client: client,
+		AGPClient: client,
 	}
 }
 
@@ -72,27 +73,20 @@ func (p *Robot) GetToken(url string, pid, userName, password string) error {
 
 // UserLogin 用户登录对某游戏服
 func (p *Robot) UserLogin(serverId int32) error {
-	route := "gate.user.login"
-
 	p.Debug("[%s] [UserLogin] request ServerID = %d", p.TagName, serverId)
 
-	msg, err := p.Request(route, &pb.LoginRequest{
+	rsp := &pb.LoginResponse{}
+	err := p.Request(methodid.GateLogin, &pb.LoginRequest{
 		ServerId: serverId,
 		Token:    p.Token,
 		Params:   nil,
-	})
+	}, rsp)
 
 	if err != nil {
 		return err
 	}
 
 	p.ServerId = serverId
-
-	rsp := &pb.LoginResponse{}
-	err = p.Serializer().Unmarshal(msg.Data, rsp)
-	if err != nil {
-		return err
-	}
 
 	p.UID = rsp.Uid
 	p.PID = rsp.Pid
@@ -104,15 +98,8 @@ func (p *Robot) UserLogin(serverId int32) error {
 
 // PlayerSelect 查看玩家列表
 func (p *Robot) PlayerSelect() error {
-	route := "game.player.select"
-
-	msg, err := p.Request(route, &pb.None{})
-	if err != nil {
-		return err
-	}
-
 	rsp := &pb.PlayerSelectResponse{}
-	err = p.Serializer().Unmarshal(msg.Data, rsp)
+	err := p.Request(methodid.GamePlayerSelect, &pb.None{}, rsp)
 	if err != nil {
 		return err
 	}
@@ -137,23 +124,20 @@ func (p *Robot) ActorCreate() error {
 		return nil
 	}
 
-	route := "game.player.create"
-	gender := rand.Int31n(1)
+	gender := rand.Int31n(2)
 
 	req := &pb.PlayerCreateRequest{
 		PlayerName: "p" + p.OpenId,
 		Gender:     gender,
 	}
 
-	msg, err := p.Request(route, req)
+	rsp := &pb.PlayerCreateResponse{}
+	err := p.Request(methodid.GamePlayerCreate, req, rsp)
 	if err != nil {
 		return err
 	}
-
-	rsp := &pb.PlayerCreateResponse{}
-	err = p.Serializer().Unmarshal(msg.Data, rsp)
-	if err != nil {
-		return err
+	if rsp.Player == nil {
+		return fmt.Errorf("create player returned an empty player")
 	}
 
 	p.PlayerId = rsp.Player.PlayerId
@@ -166,18 +150,12 @@ func (p *Robot) ActorCreate() error {
 
 // ActorEnter 角色进入游戏
 func (p *Robot) ActorEnter() error {
-	route := "game.player.enter"
 	req := &pb.Int64{
 		Value: p.PlayerId,
 	}
 
-	msg, err := p.Request(route, req)
-	if err != nil {
-		return err
-	}
-
 	rsp := &pb.PlayerEnterResponse{}
-	err = p.Serializer().Unmarshal(msg.Data, rsp)
+	err := p.Request(methodid.GamePlayerEnter, req, rsp)
 	if err != nil {
 		return err
 	}

@@ -1,69 +1,52 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
-	clogger "github.com/actorgo-game/actorgo/logger"
+	"github.com/actorgo-game/examples/test_nats/internal/natsutil"
 	"github.com/nats-io/nats.go"
 )
 
-func BytesToInt64(buf []byte) int64 {
-	return int64(binary.BigEndian.Uint64(buf))
-}
-
 func main() {
-	urls := nats.DefaultURL
-	var opts []nats.Option
-	opts = setupConnOptions(opts)
+	config := natsutil.BindFlags()
+	flag.Parse()
 
-	var subj = "cherry.nodes.game-1.10001"
-
-	nc, err := nats.Connect(urls, opts...)
+	connection, err := config.Connect("actorgo-example-reply")
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer connection.Close()
 
-	nc.Subscribe(subj, func(msg *nats.Msg) {
-		t := BytesToInt64(msg.Data)
+	if _, err = connection.Subscribe(config.Subject, func(message *nats.Msg) {
+		if len(message.Data) != 8 {
+			log.Printf("received invalid %d-byte request", len(message.Data))
+			return
+		}
+		sentAt := int64(binary.BigEndian.Uint64(message.Data))
+		latency := time.Now().UnixMicro() - sentAt
+		if respondErr := message.Respond([]byte(fmt.Sprintf("latency=%dµs", latency))); respondErr != nil {
+			log.Printf("respond: %v", respondErr)
+		}
+	}); err != nil {
+		log.Fatal(err)
+	}
+	if err = connection.Flush(); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("reply service subscribed to %s; press Ctrl+C to stop", config.Subject)
 
-		dt := time.Now().UnixMicro() - t
-
-		clogger.Debug("dt = %d, msg = %v", dt, msg)
-		msg.Respond([]byte("response msg"))
-	})
-	nc.Flush()
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	<-c
-	log.Println()
-	log.Printf("Draining...")
-	nc.Drain()
-	log.Fatalf("Exiting")
-}
-
-func setupConnOptions(opts []nats.Option) []nats.Option {
-	totalWait := 10 * time.Minute
-	reconnectDelay := time.Second
-
-	opts = append(opts, nats.ReconnectWait(reconnectDelay))
-
-	opts = append(opts, nats.MaxReconnects(int(totalWait/reconnectDelay)))
-
-	opts = append(opts, nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
-		log.Printf("Disconnected: will attempt reconnects for %.0fm", totalWait.Minutes())
-	}))
-
-	opts = append(opts, nats.ReconnectHandler(func(nc *nats.Conn) {
-		log.Printf("Reconnected [%s]", nc.ConnectedUrl())
-	}))
-	opts = append(opts, nats.ClosedHandler(func(nc *nats.Conn) {
-		log.Fatalf("Exiting: %v", nc.LastError())
-	}))
-
-	return opts
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+	if err = connection.Drain(); err != nil {
+		log.Printf("drain connection: %v", err)
+	}
 }

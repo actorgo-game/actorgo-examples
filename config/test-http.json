@@ -1,0 +1,25 @@
+{
+  "env": "http-example",
+  "debug": true,
+  "print_level": "debug",
+  "node": {
+    "3": [
+      {
+        "enabled": true,
+        "address": "127.0.0.1:18080",
+        "__settings__": {
+          "ref_logger": "http_log"
+        }
+      }
+    ]
+  },
+  "logger": {
+    "http_log": {
+      "level": "debug",
+      "stack_level": "error",
+      "enable_console": true,
+      "enable_write_file": false,
+      "print_caller": true
+    }
+  }
+}

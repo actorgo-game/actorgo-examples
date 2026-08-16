@@ -31,32 +31,19 @@ func TestStop2(t *testing.T) {
 	ctxe, cancele := context.WithCancel(ctx)
 
 	wg := sync.WaitGroup{}
-
-	wg.Add(1)
+	wg.Add(7)
 
 	go runTaskFunc(&wg, ctx, "A", func(ctx context.Context) {
-		wg.Add(1)
-
 		go runTaskFunc(&wg, ctxb, "b", func(ctx context.Context) {
-			wg.Add(1)
-
 			go runTaskFunc(&wg, ctx, "C", func(ctx context.Context) {
-				wg.Add(1)
-
 				go runTaskFunc(&wg, ctx, "D", func(ctx context.Context) {
 				})
 			})
 		})
 	})
 
-	wg.Add(1)
-
 	go runTaskFunc(&wg, ctxe, "E", func(ctx context.Context) {
-		wg.Add(1)
-
 		go runTaskFunc(&wg, ctx, "F", func(ctx context.Context) {
-			wg.Add(1)
-
 			go runTaskFunc(&wg, ctx, "G", func(ctx context.Context) {
 
 			})
@@ -64,13 +51,13 @@ func TestStop2(t *testing.T) {
 	})
 
 	go func() {
-		time.Sleep(3 * time.Second)
+		time.Sleep(30 * time.Millisecond)
 		cancele()
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(30 * time.Millisecond)
 		cancelb()
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(30 * time.Millisecond)
 		cancel()
 	}()
 

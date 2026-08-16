@@ -1,20 +1,25 @@
 package main
 
 import (
+	"flag"
+
 	"github.com/actorgo-game/actorgo"
-	cherryGORM "github.com/actorgo-game/actorgo/components/gorm"
+	cgorm "github.com/actorgo-game/actorgo/components/gorm"
 )
 
 func main() {
+	profilePath := flag.String("path", "../config/demo-gorm.json", "profile config path")
+	nodeID := flag.String("node", "0.0.5.1", "ActorGo node ID")
+	flag.Parse()
+
 	app := actorgo.Configure(
-		"../config/demo-gorm.json", // 使用环境的配置
-		"game-1",                   // 使用game-1 的节点id
-		false,
+		*profilePath,
+		*nodeID,
 		actorgo.Standalone,
 	)
 
-	// 注册gorm组件，数据库具体配置请查看 config/demo-gorm.json文件
-	app.Register(cherryGORM.NewComponent())
+	// 注册 GORM 组件，数据库配置见 config/demo-gorm.json。
+	app.Register(cgorm.NewComponent())
 
 	app.AddActors(
 		&ActorDB{},

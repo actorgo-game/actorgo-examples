@@ -2,69 +2,47 @@ package main
 
 import (
 	"encoding/binary"
-	"github.com/nats-io/nats.go"
+	"flag"
 	"log"
-	"os"
-	"os/signal"
 	"time"
+
+	"github.com/actorgo-game/examples/test_nats/internal/natsutil"
 )
 
-func Int64ToBytes(i int64) []byte {
-	var buf = make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(i))
-	return buf
+func int64ToBytes(value int64) []byte {
+	buffer := make([]byte, 8)
+	binary.BigEndian.PutUint64(buffer, uint64(value))
+	return buffer
 }
 
 func main() {
-	urls := nats.DefaultURL
-	var opts []nats.Option
-	opts = setupConnOptions(opts)
+	config := natsutil.BindFlags()
+	count := flag.Int("count", 10, "number of messages to publish")
+	interval := flag.Duration("interval", time.Second, "interval between messages")
+	flag.Parse()
+	if *count < 1 {
+		log.Fatal("count must be positive")
+	}
 
-	var subj = "cherry.nodes.game-1.10001"
-
-	nc, err := nats.Connect(urls, opts...)
+	connection, err := config.Connect("actorgo-example-publish")
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer connection.Close()
 
-	var i = 0
-	for {
-		if i == 10 {
-			break
+	for index := 0; index < *count; index++ {
+		if err = connection.Publish(config.Subject, int64ToBytes(time.Now().UnixMicro())); err != nil {
+			log.Fatal(err)
 		}
-
-		nc.Publish(subj, Int64ToBytes(time.Now().UnixMicro()))
-		time.Sleep(1 * time.Second)
-		i++
+		if index+1 < *count {
+			time.Sleep(*interval)
+		}
 	}
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	<-c
-	log.Println()
-	log.Printf("Draining...")
-	nc.Drain()
-	log.Fatalf("Exiting")
-}
-
-func setupConnOptions(opts []nats.Option) []nats.Option {
-	totalWait := 10 * time.Minute
-	reconnectDelay := time.Second
-
-	opts = append(opts, nats.ReconnectWait(reconnectDelay))
-
-	opts = append(opts, nats.MaxReconnects(int(totalWait/reconnectDelay)))
-
-	opts = append(opts, nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
-		log.Printf("Disconnected: will attempt reconnects for %.0fm", totalWait.Minutes())
-	}))
-
-	opts = append(opts, nats.ReconnectHandler(func(nc *nats.Conn) {
-		log.Printf("Reconnected [%s]", nc.ConnectedUrl())
-	}))
-	opts = append(opts, nats.ClosedHandler(func(nc *nats.Conn) {
-		log.Fatalf("Exiting: %v", nc.LastError())
-	}))
-
-	return opts
+	if err = connection.Flush(); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("published %d message(s) to %s", *count, config.Subject)
+	if err = connection.Drain(); err != nil {
+		log.Fatal(err)
+	}
 }

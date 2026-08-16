@@ -1,24 +1,28 @@
 [
   {
     "serverId": 10001,
+    "nodeId": "18014467230269441",
     "serverName": "1服",
     "areaId": 1,
     "status": 1
   },
   {
     "serverId": 10002,
+    "nodeId": "18014535949746177",
     "serverName": "2服",
     "areaId": 2,
     "status": 1
   },
   {
     "serverId": 10003,
+    "nodeId": "18014604669222913",
     "serverName": "3服",
     "areaId": 3,
     "status": 1
   },
   {
     "serverId": 10004,
+    "nodeId": "18014673388699649",
     "serverName": "4服",
     "areaId": 4,
     "status": 1

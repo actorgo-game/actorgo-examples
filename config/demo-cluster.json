@@ -10,7 +10,7 @@
       "@mode3": "mode=etcd,通过etcd同步已注册节点"
     },
     "nats": {
-      "master_node_id": "gc-master",
+      "master_node_id": "262145",
       "address": "nats://127.0.0.1:4222",
       "reconnect_delay": 1,
       "max_reconnects": 0,
@@ -20,59 +20,54 @@
     }
   },
   "node": {
-    "master": [
+    "1": [
       {
-        "node_id": "gc-master",
         "address": "",
         "__settings__": {
           "ref_logger": "master_log"
         },
-        "enable": true
+        "enabled": true
       }
     ],
-    "center": [
+    "2": [
       {
-        "node_id": "gc-center",
         "address": "",
         "__settings__": {
           "ref_logger": "center_log"
         },
-        "enable": true
+        "enabled": true
       }
     ],
-    "gate": [
+    "3": [
       {
-        "node_id": "^gc-gate-\\d+$",
+        "address": ":8081",
+        "__settings__": {
+          "ref_logger": "master_log"
+        },
+        "enabled": true
+      }
+    ],
+    "4": [
+      {
         "address": ":10010",
         "__settings__": {
-          "db_id_list" : {
+          "db_id_list": {
             "game_db_id": "game_db_1"
           },
           "ref_logger": "gate_log"
         },
-        "enable": true
+        "enabled": true
       }
     ],
-    "web": [
+    "5": [
       {
-        "node_id": "gc-web-1",
-        "address": "127.0.0.1:8081",
         "__settings__": {
-          "ref_logger": "master_log"
-        },
-        "enable": true
-      }
-    ],
-    "game": [
-      {
-        "node_id": "^\\d+$",
-        "__settings__": {
-          "db_id_list" : {
+          "db_id_list": {
             "game_db_id": "game_db_1"
           },
           "ref_logger": "game_log"
         },
-        "enable": true
+        "enabled": true
       }
     ]
   },

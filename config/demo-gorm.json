@@ -3,26 +3,12 @@
   "debug": true,
   "print_level": "debug",
   "include": [
-    "include/logger.json",
-    "include/demo-cluster.json",
-    "include/demo-data-config.json"
+    "include/logger.json"
   ],
   "node": {
-    "web": [
+    "5": [
       {
-        "enable": true,
-        "node_id": "web-1",
-        "address": ":10820",
-        "__settings__": {
-          "maintain_state": 2,
-          "ref_logger": "game_log"
-        }
-      }
-    ],
-    "game": [
-      {
-        "enable": false,
-        "node_id": "game-1",
+        "enabled": true,
         "address": ":10860",
         "__settings__": {
           "maintain_state": 2,

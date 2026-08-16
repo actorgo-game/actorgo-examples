@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	cherryGORM "github.com/actorgo-game/actorgo/components/gorm"
+	cgorm "github.com/actorgo-game/actorgo/components/gorm"
 	clog "github.com/actorgo-game/actorgo/logger"
 	cactor "github.com/actorgo-game/actorgo/net/actor"
 	"gorm.io/gorm"
@@ -21,29 +21,27 @@ func (p *ActorDB) AliasID() string {
 // OnInit Actor初始化前触发该函数
 func (p *ActorDB) OnInit() {
 	// db配置的注解
-	// 打开demo-gorm.json，找到"game-1"和"db"配置
-	// 当前示例启动的节点id为 game-1
-	// db_id_list参数配置了center_db_1，表示当前节点可以连接该数据库
-	// 当前节点启时注册了gorm组件  app.Register(cherryGORM.NewComponent())
-	// 通过gorm组件可以获取对应的gorm.DB对象
-	// 后续操作请参考gorm的用法
+	// 打开 demo-gorm.json，找到 NodeType=5 和 db 配置。
+	// 当前示例的 NodeID 为 0.0.5.1。
+	// db_id_list 配置 center_db_1，表示当前节点需要连接该数据库。
+	// main 中注册 GORM 组件后，可以通过组件获取对应的 *gorm.DB。
 
-	// 获取gorm组件
-	gorm := p.App().Find(cherryGORM.Name).(*cherryGORM.Component)
-	if gorm == nil {
-		clog.DPanic("[component = %s] not found.", cherryGORM.Name)
+	component := p.App().Find(cgorm.Name)
+	gormComponent, ok := component.(*cgorm.Component)
+	if !ok || gormComponent == nil {
+		clog.Panic("[component = %s] not found.", cgorm.Name)
 	}
 
 	// 获取 db_id = "center_db_1" 的配置
-	centerDbID := p.App().Settings().GetConfig("db_id_list").GetString("center_db_id")
-	p.centerDB = gorm.GetDb(centerDbID)
+	centerDBID := p.App().Settings().GetConfig("db_id_list").GetString("center_db_id")
+	p.centerDB = gormComponent.GetDb(centerDBID)
 	if p.centerDB == nil {
-		clog.Panic("center_db_1 not found")
+		clog.Panic("database %q not found", centerDBID)
 	}
 
-	// 每秒查询一次db
+	// 每五秒查询一次数据库。
 	p.Timer().Add(5*time.Second, p.selectDB)
-	// 1秒后进行一次分页查询
+	// 一秒后进行一次分页查询。
 	p.Timer().AddOnce(1*time.Second, p.selectPagination)
 }
 
@@ -79,10 +77,13 @@ func (p *ActorDB) pagination(page, pageSize int) ([]*UserBindTable, int64) {
 	var list []*UserBindTable
 	var count int64
 
-	p.centerDB.Model(&UserBindTable{}).Count(&count)
+	if err := p.centerDB.Model(&UserBindTable{}).Count(&count).Error; err != nil {
+		clog.Warn(err.Error())
+		return nil, 0
+	}
 
 	if count > 0 {
-		list = make([]*UserBindTable, pageSize)
+		list = make([]*UserBindTable, 0, pageSize)
 		s := p.centerDB.Limit(pageSize).Offset((page - 1) * pageSize)
 		if err := s.Find(&list).Error; err != nil {
 			clog.Warn(err.Error())

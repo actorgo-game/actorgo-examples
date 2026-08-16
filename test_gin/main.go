@@ -8,8 +8,7 @@ import (
 func main() {
 	app := actorgo.NewApp(
 		"../config/test.json",
-		"web-1",
-		false,
+		"0.0.3.1",
 		actorgo.Standalone,
 	)
 

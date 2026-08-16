@@ -12,8 +12,7 @@ import (
 func main() {
 	testApp := actorgo.NewApp(
 		"../config/test.json",
-		"game-1",
-		false,
+		"0.0.5.1",
 		actorgo.Standalone,
 	)
 

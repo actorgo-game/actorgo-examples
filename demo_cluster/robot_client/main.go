@@ -1,48 +1,77 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math/rand"
+	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	chttp "github.com/actorgo-game/actorgo/extend/http"
 	clog "github.com/actorgo-game/actorgo/logger"
-	pomeloClient "github.com/actorgo-game/actorgo/net/parser/pomelo/client"
 	"github.com/actorgo-game/examples/demo_cluster/internal/code"
 	jsoniter "github.com/json-iterator/go"
 )
 
-var (
-	maxRobotNum       = 5000                    // 运行x个机器人
-	url               = "http://127.0.0.1:8081" // web node
-	addr              = "127.0.0.1:10011"       // 网关地址(正式环境通过区服列表获取)
-	serverId    int32 = 10001                   // 测试的游戏服id
-	pid               = "2126001"               // 测试的sdk包id
-	printLog          = false                   // 是否输出详细日志
-)
-
 func main() {
+	robotCount := flag.Int("count", 1, "number of robots")
+	webURL := flag.String("web", "http://127.0.0.1:8081", "web node URL")
+	gateAddress := flag.String("gate", "127.0.0.1:10011", "gate TCP address")
+	serverID := flag.Int("server", 10001, "game server ID")
+	pid := flag.String("pid", "2126001", "SDK package ID")
+	accountPrefix := flag.String("account-prefix", "test", "robot account prefix")
+	printLog := flag.Bool("verbose", false, "print detailed robot logs")
+	keepAlive := flag.Bool("keepalive", false, "keep successful robot connections alive")
+	flag.Parse()
+
+	if *robotCount < 1 {
+		clog.Warn("robot count must be positive")
+		return
+	}
+
 	wg := sync.WaitGroup{}
-	wg.Add(1)
+	var failed atomic.Int32
 
 	accounts := make(map[string]string)
-	for i := 1; i <= maxRobotNum; i++ {
-		key := fmt.Sprintf("test%d", i)
+	for i := 1; i <= *robotCount; i++ {
+		key := fmt.Sprintf("%s%d", *accountPrefix, i)
 		accounts[key] = key
 	}
 
-	RegisterDevAccount(url, accounts)
+	if err := RegisterDevAccount(*webURL, accounts); err != nil {
+		clog.Error("register through web node %s failed: %v; start the web node or set --web", *webURL, err)
+		os.Exit(1)
+	}
 
 	for userName, password := range accounts {
 		time.Sleep(time.Duration(rand.Int31n(10)) * time.Millisecond)
-		go RunRobot(url, pid, userName, password, addr, serverId, printLog)
+		wg.Add(1)
+		go func(userName, password string) {
+			defer wg.Done()
+			robot := RunRobot(*webURL, *pid, userName, password, *gateAddress, int32(*serverID), *printLog)
+			if robot == nil {
+				failed.Add(1)
+				return
+			}
+			if !*keepAlive {
+				robot.Close()
+			}
+		}(userName, password)
 	}
 
 	wg.Wait()
+	if failed.Load() > 0 {
+		clog.Error("%d robot(s) failed", failed.Load())
+		os.Exit(1)
+	}
+	if *keepAlive {
+		select {}
+	}
 }
 
-func RegisterDevAccount(url string, accounts map[string]string) {
+func RegisterDevAccount(url string, accounts map[string]string) error {
 	requestURL := fmt.Sprintf("%s/register", url)
 
 	for key, val := range accounts {
@@ -53,29 +82,25 @@ func RegisterDevAccount(url string, accounts map[string]string) {
 
 		jsonBytes, _, err := chttp.GET(requestURL, params)
 		if err != nil {
-			clog.Warn(err.Error())
-			return
+			return fmt.Errorf("register account %s: %w", key, err)
 		}
 
 		rsp := &code.Result{}
 		err = jsoniter.Unmarshal(jsonBytes, rsp)
 		if err != nil {
-			clog.Warn(err.Error())
-			return
+			return fmt.Errorf("decode register response for account %s: %w", key, err)
 		}
 
 		clog.Debug("register account = %s, result = %+v", key, rsp)
 	}
+	return nil
 }
 
 func RunRobot(url, pid, userName, password, addr string, serverId int32, printLog bool) *Robot {
 
 	// 创建客户端
 	cli := New(
-		pomeloClient.New(
-			pomeloClient.WithRequestTimeout(10*time.Second),
-			pomeloClient.WithErrorBreak(true),
-		),
+		NewAGPClient(10 * time.Second),
 	)
 	cli.PrintLog = printLog
 
@@ -86,7 +111,7 @@ func RunRobot(url, pid, userName, password, addr string, serverId int32, printLo
 	}
 
 	// 根据地址连接网关
-	if err := cli.ConnectToTCP(addr); err != nil {
+	if err := cli.Connect(addr); err != nil {
 		clog.Error(err.Error())
 		return nil
 	}
@@ -139,7 +164,7 @@ func RunRobot(url, pid, userName, password, addr string, serverId int32, printLo
 	elapsedTime := cli.StartTime.NowDiffMillisecond()
 	clog.Debug("[%s] is enter to game. elapsed time:%dms", cli.TagName, elapsedTime)
 
-	//cli.Disconnect()
+	// cli.Close()
 
 	return cli
 }

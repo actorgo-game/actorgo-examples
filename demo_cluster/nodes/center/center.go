@@ -13,7 +13,6 @@ func Run(profileFilePath, nodeID string) {
 	app := actorgo.Configure(
 		profileFilePath,
 		nodeID,
-		false,
 		actorgo.Cluster,
 	)
 

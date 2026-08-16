@@ -1,14 +1,23 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
-	cherryFacade "github.com/actorgo-game/actorgo/facade"
-	cherryActor "github.com/actorgo-game/actorgo/net/actor"
+	cfacade "github.com/actorgo-game/actorgo/facade"
+	cactor "github.com/actorgo-game/actorgo/net/actor"
 )
 
+const childHelloMethodID uint32 = 1001
+
+type helloRequest struct{}
+
+type helloResponse struct {
+	Text string `json:"text"`
+}
+
 type actor struct {
-	cherryActor.Base
+	cactor.Base
 }
 
 func (*actor) AliasID() string {
@@ -19,13 +28,20 @@ func (p *actor) OnInit() {
 	fmt.Println("[actor] Execute OnInit()")
 
 	childActorID := "1"
-	p.Child().Create(childActorID, &childActor{})
+	if _, err := p.Child().Create(childActorID, &childActor{}); err != nil {
+		panic(err)
+	}
 
-	targetPath := cherryFacade.NewChildPath("", p.AliasID(), childActorID)
-	targetFuncName := "hello"
-
-	p.CallWait(targetPath, targetFuncName, nil, nil)
-	//fmt.Println(reply)
+	ctx := cfacade.NewRequestContext(context.Background())
+	result := p.InvokeChild(ctx, childActorID, childHelloMethodID, &helloRequest{})
+	if !result.OK() {
+		panic(fmt.Sprintf("invoke child failed: code=%d message=%s", result.Code, result.Message))
+	}
+	reply, ok := result.Payload.(*helloResponse)
+	if !ok {
+		panic(fmt.Sprintf("unexpected child response: %T", result.Payload))
+	}
+	fmt.Println(reply.Text)
 }
 
 func (*actor) OnStop() {

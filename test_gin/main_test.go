@@ -1,25 +1,28 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
-	"time"
 
-	chttp "github.com/actorgo-game/actorgo/extend/http"
+	"github.com/gin-gonic/gin"
 )
 
-func TestControllerMaxConnect(t *testing.T) {
+func TestControllerIndex(t *testing.T) {
+	engine := gin.New()
+	controller := new(Test1Controller)
+	controller.PreInit(nil, engine)
+	controller.Init()
 
-	for i := 0; i < 100; i++ {
-		go func(i int) {
-			result, rsp, _ := chttp.GET("http://127.0.0.1:10820")
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
 
-			if rsp != nil && rsp.StatusCode != http.StatusOK {
-				fmt.Printf("index = %d, result = %s, code = %v\n", i, result, rsp.StatusCode)
-			}
-		}(i)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
-
-	time.Sleep(1 * time.Hour)
+	if !strings.Contains(response.Body.String(), "this is index") {
+		t.Fatalf("unexpected response body %q", response.Body.String())
+	}
 }

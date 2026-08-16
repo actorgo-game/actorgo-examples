@@ -5,8 +5,7 @@
     <title>Game Cluster</title>
     <meta charset="utf-8">
     <script src="static/pb.js"></script>
-    <script src="static/protocol.js" type="text/javascript"></script>
-    <script src="static/pomelo-client-protobuf.js" type="text/javascript"></script>
+    <script src="static/agp-client.js" type="text/javascript"></script>
     <script src="static/jquery-3.6.1.min.js"></script>
     <script src="static/bootstrap.min.js"></script>
     <link rel="stylesheet" href="static/bootstrap.min.css">
@@ -120,7 +119,7 @@
                         <label class="col-sm-4 control-label">web节点</label>
                         <div class="col-sm-6">
                             <select class="form-control" id="web-url">
-                                <option value="http://127.0.0.1:8081">本机 127.0.0.1:8081</option>
+                                <option value="">当前网页地址</option>
                             </select>
                         </div>
                     </div>
@@ -166,7 +165,12 @@
 <script>
     var url, accountName, accountPassword, pid, token;
     var serverId, gateHost, gatePort;
-    var playerInfo;
+    var playerInfo, agpClient;
+
+    var METHOD_GATE_LOGIN = 2001;
+    var METHOD_PLAYER_SELECT = 3001;
+    var METHOD_PLAYER_CREATE = 3002;
+    var METHOD_PLAYER_ENTER = 3003;
 
     $(document).ready(function () {
         $('#panel_env').modal("show");
@@ -183,7 +187,7 @@
     });
 
     function setting_info() {
-        url = $("#web-url").val();
+        url = $("#web-url").val() || window.location.origin;
         accountName = $("#account-name").val();
         accountPassword = $("#account-password").val();
         pid = $("#pid").val();
@@ -248,54 +252,67 @@
         return "";
     }
 
-    function server_login() {
+    async function server_login() {
         var s = $("#server-list option:selected");
         serverId = s.val();
-        var gate = s.attr("gate").split(":");
+        var gateAddress = s.attr("gate");
+        if (!serverId || !gateAddress) {
+            showError(new Error("没有可用的游戏服或网关地址"));
+            return;
+        }
+
+        var gate = gateAddress.split(":");
 
         gateHost = gate[0];
         gatePort = gate[1];
+        if (gateHost === "127.0.0.1" || gateHost === "localhost") {
+            gateHost = new URL(url).hostname;
+        }
         console.log(serverId, gateHost, gatePort);
 
-        pomelo.init({host: gateHost, port: gatePort, path: '/'}, function () {
-            console.log("connected!");
+        var button = $("#btn-p3");
+        button.prop("disabled", true).text("连接中...");
+        try {
+            if (agpClient) {
+                agpClient.disconnect();
+            }
+            agpClient = new ActorGoAGPClient();
+            await agpClient.connect(gateHost, gatePort, "/");
+            console.log("AGP/1 connected!");
 
             var loginRequest = new proto.pb.LoginRequest();
-            loginRequest.setServerid(serverId);
+            loginRequest.setServerid(Number(serverId));
             loginRequest.setToken(token);
 
-            var loginData = loginRequest.serializeBinary()
-
-            // request login
-            pomelo.request("gate.user.login", loginData, function (data) {
-                data = proto.pb.LoginResponse.deserializeBinary(data.body).toObject();
-                console.log(data);
-                if (data.uid > 0) {
-                    playerSelect();
-                }
-            });
-        });
+            var body = await agpClient.request(METHOD_GATE_LOGIN, loginRequest.serializeBinary());
+            var data = proto.pb.LoginResponse.deserializeBinary(body).toObject();
+            console.log(data);
+            if (data.uid > 0) {
+                await playerSelect();
+            }
+        } catch (error) {
+            showError(error);
+        } finally {
+            button.prop("disabled", false).text("进入");
+        }
     }
 
-    function playerSelect() {
+    async function playerSelect() {
         var noneRequest = new proto.pb.None();
-        var noneData = noneRequest.serializeBinary();
+        var body = await agpClient.request(METHOD_PLAYER_SELECT, noneRequest.serializeBinary());
+        var data = proto.pb.PlayerSelectResponse.deserializeBinary(body).toObject();
+        console.log(data);
 
-        pomelo.request("game.player.select", noneData, function (data) {
-            data = proto.pb.PlayerSelectResponse.deserializeBinary(data.body).toObject();
-            console.log(data);
+        if (data.listList.length > 0) {
+            playerInfo = data.listList[0];
+            setPlayerList();
 
-            if (data.listList.length > 0) {
-                playerInfo = data.listList[0];
-                setPlayerList();
-
-                $("#p3").hide();
-                $("#p5").show();
-            } else {
-                $("#p3").hide();
-                $("#p4").show();
-            }
-        });
+            $("#p3").hide();
+            $("#p5").show();
+        } else {
+            $("#p3").hide();
+            $("#p4").show();
+        }
     }
 
     function setPlayerList() {
@@ -303,23 +320,19 @@
         $("#player-list").append(opt);
     }
 
-    function playerCreate() {
+    async function playerCreate() {
         var gender = $("#create-player-gender option:selected").val();
         var playerName = $("#create-player-name").val();
+        var button = $("#btn-p4");
 
         var createRequest = new proto.pb.PlayerCreateRequest()
-        createRequest.setGender(gender);
+        createRequest.setGender(Number(gender));
         createRequest.setPlayername(playerName)
 
-        var createData = createRequest.serializeBinary();
-
-        pomelo.request("game.player.create", createData, function (data) {
-            if (data.isError > 0) {
-                showError(data);
-                return;
-            }
-
-            data = proto.pb.PlayerCreateResponse.deserializeBinary(data.body).toObject();
+        button.prop("disabled", true).text("创建中...");
+        try {
+            var body = await agpClient.request(METHOD_PLAYER_CREATE, createRequest.serializeBinary());
+            var data = proto.pb.PlayerCreateResponse.deserializeBinary(body).toObject();
             if (data.player.playerid > 0) {
                 playerInfo = data.player;
                 setPlayerList();
@@ -327,34 +340,39 @@
                 $("#p4").hide();
                 $("#p5").show();
             }
-        });
+        } catch (error) {
+            showError(error);
+        } finally {
+            button.prop("disabled", false).text("创建角色");
+        }
     }
 
-    function playerEnter() {
+    async function playerEnter() {
+        var button = $("#btn-p5");
         var enterRequest = new proto.pb.Int64();
         enterRequest.setValue(playerInfo.playerid);
 
-        var enterData = enterRequest.serializeBinary();
-
-        pomelo.request("game.player.enter", enterData, function (data) {
-            if (data.isError > 0) {
-                showError(data);
-                return;
-            }
-
-            data = proto.pb.PlayerEnterResponse.deserializeBinary(data.body).toObject();
-            console.log(data.guidemaps);
+        button.prop("disabled", true).text("进入中...");
+        try {
+            var body = await agpClient.request(METHOD_PLAYER_ENTER, enterRequest.serializeBinary());
+            var data = proto.pb.PlayerEnterResponse.deserializeBinary(body).toObject();
+            console.log(data.guidemapsMap);
 
             $("#player-info").html(JSON.stringify(playerInfo) + "角色已进入游戏，流程结束!");
 
             $("#p5").hide();
             $("#p6").show();
-        });
+        } catch (error) {
+            showError(error);
+        } finally {
+            button.prop("disabled", false).text("选择角色");
+        }
     }
 
-    function showError(data) {
-        var err = proto.pb.ErrorResponse.deserializeBinary(data.body).toObject()
-        alert(err.code + err.message);
+    function showError(error) {
+        console.error(error);
+        var message = error && error.message ? error.message : String(error);
+        alert(message);
     }
 
 </script>
