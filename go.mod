@@ -3,7 +3,7 @@ module github.com/actorgo-game/examples
 go 1.26.1
 
 require (
-	github.com/actorgo-game/actorgo v2.0.1
+	github.com/actorgo-game/actorgo v1.0.20
 	github.com/ahmetb/go-linq/v3 v3.2.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-redis/redis/v8 v8.11.5
